@@ -1,14 +1,19 @@
 "use client";
-import React, { useState } from 'react';
-import { Plus, Trash2, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Trash2, Download, Edit2, Check, X } from 'lucide-react';
 
 const CourseDetailsForm = () => {
   const [courseDetails, setCourseDetails] = useState({
+    studentName: '',
     courseName: '',
     duration: '',
     totalFee: '',
-    installments: [{ amount: '', dueDate: '' }]
+    registrationFee: '',
+    installments: []
   });
+
+  const [editingIndex, setEditingIndex] = useState(-1);
+  const [editAmount, setEditAmount] = useState('');
 
   const durationOptions = [
     "3 months", "4 months", "5 months", "6 months",
@@ -16,10 +21,78 @@ const CourseDetailsForm = () => {
     "11 months", "12 months", "1 year"
   ];
 
+  // Calculate installments when duration or fees change
+  useEffect(() => {
+    if (courseDetails.duration && courseDetails.totalFee && courseDetails.registrationFee) {
+      generateInstallments();
+    }
+  }, [courseDetails.duration, courseDetails.totalFee, courseDetails.registrationFee]);
+
+  const generateInstallments = () => {
+    const totalFee = parseFloat(courseDetails.totalFee);
+    const registrationFee = parseFloat(courseDetails.registrationFee);
+    
+    if (isNaN(totalFee) || isNaN(registrationFee)) return;
+    
+    // Extract number of months from duration
+    let months = 0;
+    if (courseDetails.duration === "1 year") {
+      months = 12;
+    } else {
+      months = parseInt(courseDetails.duration.split(" ")[0]);
+    }
+    
+    if (months <= 0) return;
+    
+    // Calculate equal installment amount (without registration fee)
+    const installmentAmount = totalFee / months;
+    
+    // Create installment objects
+    const newInstallments = [];
+    
+    for (let i = 0; i < months; i++) {
+      // Calculate due date (current date + i months)
+      const dueDate = new Date();
+      dueDate.setMonth(dueDate.getMonth() + i);
+      const formattedDate = dueDate.toISOString().split('T')[0];
+      
+      if (i === 0) {
+        // First installment is (installmentAmount - registrationFee)
+        const firstInstallment = installmentAmount - registrationFee;
+        newInstallments.push({
+          amount: firstInstallment.toFixed(2),
+          dueDate: formattedDate,
+          isFirstMonth: true
+        });
+      } else {
+        newInstallments.push({
+          amount: installmentAmount.toFixed(2),
+          dueDate: formattedDate,
+          isFirstMonth: false
+        });
+      }
+    }
+    
+    setCourseDetails(prev => ({
+      ...prev,
+      installments: newInstallments
+    }));
+  };
+
   const addInstallment = () => {
+    const dueDate = new Date();
+    if (courseDetails.installments.length > 0) {
+      const lastDueDate = new Date(courseDetails.installments[courseDetails.installments.length - 1].dueDate);
+      dueDate.setMonth(lastDueDate.getMonth() + 1);
+    }
+    
     setCourseDetails({
       ...courseDetails,
-      installments: [...courseDetails.installments, { amount: '', dueDate: '' }]
+      installments: [...courseDetails.installments, { 
+        amount: '0', 
+        dueDate: dueDate.toISOString().split('T')[0],
+        isFirstMonth: false
+      }]
     });
   };
 
@@ -44,6 +117,22 @@ const CourseDetailsForm = () => {
     });
   };
 
+  const startEditing = (index) => {
+    setEditingIndex(index);
+    setEditAmount(courseDetails.installments[index].amount);
+  };
+
+  const cancelEditing = () => {
+    setEditingIndex(-1);
+    setEditAmount('');
+  };
+
+  const saveEditing = (index) => {
+    handleInstallmentChange(index, 'amount', editAmount);
+    setEditingIndex(-1);
+    setEditAmount('');
+  };
+
   const generatePDF = () => {
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
@@ -52,128 +141,145 @@ const CourseDetailsForm = () => {
           <title>Course Details</title>
           <style>
             body {
-              font-family: Arial, sans-serif;
-              padding: 40px;
+              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+              margin: 0;
+              padding: 0;
+              background-color: #f4f4f4;
+            }
+            .container {
               max-width: 800px;
               margin: 0 auto;
-              color: #333;
+              padding: 20px;
+              background-color: #fff;
             }
             .header {
               text-align: center;
-              margin-bottom: 40px;
-              padding-bottom: 20px;
-              border-bottom: 2px solid #1a365d;
+              padding: 20px 0;
+              border-bottom: 2px solid #333;
             }
-            .company-logo {
-            
-              height: 60px;
-              background-color: #121315;
-              margin: 0 auto 20px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: white;
-              font-weight: bold;
+            .logo {
+              width: 60px;
+              margin-bottom: 10px;
             }
             .company-name {
               font-size: 24px;
-              color: #1a365d;
-              margin-bottom: 10px;
+              font-weight: bold;
+              color: #333;
             }
             .document-title {
               font-size: 28px;
+              margin-top: 10px;
               color: #1a365d;
-              margin-bottom: 30px;
-              text-transform:uppercase;
             }
-            .details-section {
-              background-color: #f8fafc;
-              padding: 25px;
-              border-radius: 8px;
-              margin-bottom: 30px;
-            }
-            .details-title {
-              font-size: 20px;
-              color: #1a365d;
-              margin-bottom: 15px;
-              text-transform:uppercase;
-            }
-            .detail-row {
-              display: flex;
-              margin-bottom: 15px;
-              border-bottom: 1px solid #e2e8f0;
-              padding-bottom: 10px;
-            }
-            .detail-label {
-              font-weight: bold;
-              width: 150px;
-              color: #475569;
-            }
-            .detail-value {
-              flex: 1;
-            }
-            .installments-section {
+            .section {
               margin-top: 30px;
             }
-            .installment-item {
-              background-color: #f8fafc;
-              padding: 15px;
+            .section-title {
+              font-size: 20px;
+              font-weight: bold;
+              color: #1a365d;
+              border-bottom: 1px solid #ccc;
+              padding-bottom: 5px;
               margin-bottom: 15px;
-              border-radius: 8px;
+            }
+            .details-table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            .details-table th, .details-table td {
+              text-align: left;
+              padding: 8px;
+            }
+            .details-table th {
+              background-color: #f8fafc;
+              color: #1a365d;
+            }
+            .details-table td {
+              border-bottom: 1px solid #e2e8f0;
+            }
+            .installment-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 10px;
+            }
+            .installment-table th, .installment-table td {
+              padding: 8px;
+              border: 1px solid #ccc;
+              text-align: center;
             }
             .footer {
-              margin-top: 40px;
               text-align: center;
-              color: #64748b;
               font-size: 14px;
+              color: #64748b;
+              margin-top: 30px;
+              border-top: 1px solid #ccc;
+              padding-top: 10px;
             }
           </style>
         </head>
         <body>
-          <div class="header">
-            <div class="company-logo">
-              <img src="https://www.sysdevcode.com/images/logo1.png" alt="" style="width: 35px;">
+          <div class="container">
+            <div class="header">
+              <img src="https://www.sysdevcode.com/images/logo1.png" alt="Logo" class="logo" />
+              <div class="company-name">Sysdevcode Technologies Private Limited</div>
+              <div class="document-title">Course Registration Details</div>
             </div>
-            <div class="company-name">Sysdevcode Technologies private limited</div>
-            <h1 class="document-title">Course Registration Details</h1>
-          </div>
-
-          <div class="details-section">
-            <h2 class="details-title">Course Information</h2>
-            <div class="detail-row">
-              <div class="detail-label">Course Name:</div>
-              <div class="detail-value">${courseDetails.courseName}</div>
+            <div class="section">
+              <div class="section-title">Student Information</div>
+              <table class="details-table">
+                <tr>
+                  <th>Student Name</th>
+                  <td>${courseDetails.studentName}</td>
+                </tr>
+              </table>
             </div>
-            <div class="detail-row">
-              <div class="detail-label">Duration:</div>
-              <div class="detail-value">${courseDetails.duration}</div>
+            <div class="section">
+              <div class="section-title">Course Information</div>
+              <table class="details-table">
+                <tr>
+                  <th>Course Name</th>
+                  <td>${courseDetails.courseName}</td>
+                </tr>
+                <tr>
+                  <th>Duration</th>
+                  <td>${courseDetails.duration}</td>
+                </tr>
+                <tr>
+                  <th>Total Fee</th>
+                  <td>₹${courseDetails.totalFee}</td>
+                </tr>
+                <tr>
+                  <th>Registration Fee</th>
+                  <td>₹${courseDetails.registrationFee}</td>
+                </tr>
+              </table>
             </div>
-            <div class="detail-row">
-              <div class="detail-label">Total Fee:</div>
-              <div class="detail-value">₹${courseDetails.totalFee}</div>
+            <div class="section">
+              <div class="section-title">Installment Schedule</div>
+              <table class="installment-table">
+                <thead>
+                  <tr>
+                    <th>Installment #</th>
+                    <th>Amount (₹)</th>
+                    <th>Due Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${courseDetails.installments.map((inst, index) => `
+                    <tr>
+                      <td>${index + 1}</td>
+                      <td>${inst.amount} ${inst.isFirstMonth ? '(After Reg. Fee)' : ''}</td>
+                      <td>${inst.dueDate}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
             </div>
-          </div>
-
-          <div class="installments-section">
-            <h2 class="details-title">Installment Schedule</h2>
-            ${courseDetails.installments.map((inst, index) => `
-              <div class="installment-item">
-                <div class="detail-row">
-                  <div class="detail-label">Installment ${index + 1}</div>
-                  <div class="detail-value">
-                    Amount: ₹${inst.amount}<br>
-                    Due Date: ${inst.dueDate}
-                  </div>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-
-          <div class="footer">
-            <p>Thank you for choosing sysdevcode</p>
-            <p>Contact: +91 7510991147 | Email: info@sysdevcode.com</p>
-            <p>Address: SYSDEVCODE ACADEMY , 1st Floor Lotus Building, Akg Vayanasala Road ,
-Near Holydayinn Vytila Bypass, Kochi</p>
+            <div class="footer">
+              <p>Thank you for choosing Sysdevcode Technologies</p>
+              <p>Contact: +91 7510991147 | Email: info@sysdevcode.com</p>
+              <p>Address: SYSDEVCODE ACADEMY, 1st Floor Lotus Building, Akg Vayanasala Road, Near Holiday Inn Vytila Bypass, Kochi</p>
+            </div>
           </div>
         </body>
       </html>
@@ -187,6 +293,17 @@ Near Holydayinn Vytila Bypass, Kochi</p>
       <h1 className="text-2xl font-bold mb-6 uppercase">Course Details Form</h1>
       
       <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium mb-1">Student Name</label>
+          <input
+            type="text"
+            value={courseDetails.studentName}
+            onChange={(e) => setCourseDetails({...courseDetails, studentName: e.target.value})}
+            className="w-full p-2 border rounded-md"
+            placeholder="Enter student name"
+          />
+        </div>
+        
         <div>
           <label className="block text-sm font-medium mb-1">Course Name</label>
           <input
@@ -212,15 +329,28 @@ Near Holydayinn Vytila Bypass, Kochi</p>
           </select>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">Total Fee</label>
-          <input
-            type="number"
-            value={courseDetails.totalFee}
-            onChange={(e) => setCourseDetails({...courseDetails, totalFee: e.target.value})}
-            className="w-full p-2 border rounded-md"
-            placeholder="Enter total fee"
-          />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Total Fee</label>
+            <input
+              type="number"
+              value={courseDetails.totalFee}
+              onChange={(e) => setCourseDetails({...courseDetails, totalFee: e.target.value})}
+              className="w-full p-2 border rounded-md"
+              placeholder="Enter total fee"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium mb-1">Registration Fee</label>
+            <input
+              type="number"
+              value={courseDetails.registrationFee}
+              onChange={(e) => setCourseDetails({...courseDetails, registrationFee: e.target.value})}
+              className="w-full p-2 border rounded-md"
+              placeholder="Enter registration fee"
+            />
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -237,13 +367,48 @@ Near Holydayinn Vytila Bypass, Kochi</p>
           {courseDetails.installments.map((installment, index) => (
             <div key={index} className="flex gap-4 items-start p-4 border rounded-md">
               <div className="flex-1 space-y-2">
-                <input
-                  type="number"
-                  value={installment.amount}
-                  onChange={(e) => handleInstallmentChange(index, 'amount', e.target.value)}
-                  className="w-full p-2 border rounded-md"
-                  placeholder="Amount"
-                />
+                <div className="flex items-center gap-2">
+                  {editingIndex === index ? (
+                    <>
+                      <input
+                        type="number"
+                        value={editAmount}
+                        onChange={(e) => setEditAmount(e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                        placeholder="Amount"
+                      />
+                      <button
+                        onClick={() => saveEditing(index)}
+                        className="p-2 text-green-500 hover:text-green-600"
+                      >
+                        <Check className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={cancelEditing}
+                        className="p-2 text-red-500 hover:text-red-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex-1 p-2 border rounded-md">
+                        ₹{installment.amount}
+                        {installment.isFirstMonth && (
+                          <span className="text-xs text-gray-500 ml-2">
+                            (After Registration Fee)
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => startEditing(index)}
+                        className="p-2 text-blue-500 hover:text-blue-600"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                </div>
                 <input
                   type="date"
                   value={installment.dueDate}
