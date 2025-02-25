@@ -21,7 +21,7 @@ const CourseDetailsForm = () => {
     "11 months", "12 months", "1 year"
   ];
 
-  // Calculate installments when duration or fees change
+  // Recalculate installments when duration or fees change
   useEffect(() => {
     if (courseDetails.duration && courseDetails.totalFee && courseDetails.registrationFee) {
       generateInstallments();
@@ -31,48 +31,37 @@ const CourseDetailsForm = () => {
   const generateInstallments = () => {
     const totalFee = parseFloat(courseDetails.totalFee);
     const registrationFee = parseFloat(courseDetails.registrationFee);
-    
+
     if (isNaN(totalFee) || isNaN(registrationFee)) return;
-    
-    // Extract number of months from duration
+
+    // Determine number of months from duration
     let months = 0;
     if (courseDetails.duration === "1 year") {
       months = 12;
     } else {
       months = parseInt(courseDetails.duration.split(" ")[0]);
     }
-    
     if (months <= 0) return;
-    
-    // Calculate equal installment amount (without registration fee)
-    const installmentAmount = totalFee / months;
-    
-    // Create installment objects
+
+    // Calculate equal installment amount for each month
+    const perMonthAmount = totalFee / months;
+    // First installment deducts the registration fee
+    const firstInstallment = perMonthAmount - registrationFee;
+
     const newInstallments = [];
-    
     for (let i = 0; i < months; i++) {
       // Calculate due date (current date + i months)
       const dueDate = new Date();
       dueDate.setMonth(dueDate.getMonth() + i);
-      const formattedDate = dueDate.toISOString().split('T')[0];
-      
-      if (i === 0) {
-        // First installment is (installmentAmount - registrationFee)
-        const firstInstallment = installmentAmount - registrationFee;
-        newInstallments.push({
-          amount: firstInstallment.toFixed(2),
-          dueDate: formattedDate,
-          isFirstMonth: true
-        });
-      } else {
-        newInstallments.push({
-          amount: installmentAmount.toFixed(2),
-          dueDate: formattedDate,
-          isFirstMonth: false
-        });
-      }
+      const formattedDate = dueDate.toISOString().split("T")[0];
+
+      newInstallments.push({
+        amount: (i === 0 ? firstInstallment : perMonthAmount).toFixed(2),
+        dueDate: formattedDate,
+        isFirstMonth: i === 0
+      });
     }
-    
+
     setCourseDetails(prev => ({
       ...prev,
       installments: newInstallments
